@@ -36,98 +36,6 @@ struct GenericKey {
     static constexpr size_t SIZE = N;
 };
 
-// String key with small string optimization
-struct StringKey {
-    static constexpr size_t SSO_SIZE = 23;  // Small string optimization size
-    
-    union {
-        struct {
-            char data[SSO_SIZE];
-            uint8_t size;  // Also stores SSO flag in highest bit
-        } small;
-        struct {
-            char* ptr;
-            size_t capacity;
-            size_t size;
-        } large;
-    };
-    
-    StringKey() : small{} {
-        small.size = 0;
-    }
-    
-    StringKey(std::string_view sv) {
-        if (sv.length() <= SSO_SIZE) {
-            memcpy(small.data, sv.data(), sv.length());
-            small.size = static_cast<uint8_t>(sv.length());
-        } else {
-            large.size = sv.length();
-            large.capacity = sv.length();
-            large.ptr = new char[sv.length()];
-            memcpy(large.ptr, sv.data(), sv.length());
-            small.size = SSO_SIZE + 1;  // Mark as large string
-        }
-    }
-    
-    StringKey(const StringKey& other) {
-        if (other.small.size <= SSO_SIZE) {
-            memcpy(&small, &other.small, sizeof(small));
-        } else {
-            large.size = other.large.size;
-            large.capacity = other.large.size;
-            large.ptr = new char[large.size];
-            memcpy(large.ptr, other.large.ptr, large.size);
-            small.size = SSO_SIZE + 1;
-        }
-    }
-    
-    StringKey& operator=(StringKey&& other) noexcept {
-        if (this != &other) {
-            // First clean up our own resources
-            if (small.size > SSO_SIZE && large.ptr != nullptr) {
-                delete[] large.ptr;
-            }
-
-            // Then move the data
-            if (other.small.size <= SSO_SIZE) {
-                memcpy(&small, &other.small, sizeof(small));
-            } else {
-                large.ptr = other.large.ptr;
-                large.size = other.large.size;
-                large.capacity = other.large.capacity;
-                small.size = SSO_SIZE + 1;
-                
-                // Clear the source
-                other.small.size = 0;
-                other.large.ptr = nullptr;
-            }
-        }
-        return *this;
-    }
-
-    StringKey& operator=(const StringKey& other) {
-        if (this != &other) {
-            // First clean up our own resources
-            if (small.size > SSO_SIZE && large.ptr != nullptr) {
-                delete[] large.ptr;
-            }
-
-            // Then copy the data
-            if (other.small.size <= SSO_SIZE) {
-                memcpy(&small, &other.small, sizeof(small));
-            } else {
-                large.size = other.large.size;
-                large.capacity = other.large.size;
-                large.ptr = new char[large.size];
-                memcpy(large.ptr, other.large.ptr, large.size);
-                small.size = SSO_SIZE + 1;
-            }
-        }
-        return *this;
-    }
-};
-
-// Add after other key type definitions
 struct CompactStringKey {
     static constexpr uint8_t BITS_PER_CHAR = 5;
     static constexpr uint8_t MAX_LENGTH = 12;  // 12 * 5 = 60 bits
@@ -303,39 +211,6 @@ struct KeyHasher<GenericKey<N>, BucketNum> {
             SpeckCipher::decrypt_block(blocks[i], blocks[i+1]);
         }
         memcpy(key.data, blocks, N);
-    }
-};
-
-template<uint32_t BucketNum>
-struct KeyHasher<StringKey, BucketNum> {
-    static void divide_key(const StringKey& key, uint32_t& index, uint16_t& fp, uint64_t* left_part) {
-        const char* data;
-        size_t len;
-        
-        if (key.small.size <= StringKey::SSO_SIZE) {
-            data = key.small.data;
-            len = key.small.size;
-        } else {
-            data = key.large.ptr;
-            len = key.large.size;
-        }
-        
-        // Use xxHash for the initial hash
-        uint64_t h1 = XXH3_64bits(data, len);
-        uint64_t h2 = XXH3_64bits_withSeed(data, len, h1);
-        
-        // Generate outputs
-        index = h1 % BucketNum;
-        fp = static_cast<uint16_t>(h2);
-        
-        // Store hash values for reconstruction
-        left_part[0] = h1;
-        left_part[1] = h2;
-    }
-    
-    static void combine_key(StringKey& /*key*/, uint32_t /*bucket_idx*/, 
-                          uint16_t /*fp*/, const uint64_t* /*left_part*/) {
-        // Empty implementation as strings are handled differently
     }
 };
 

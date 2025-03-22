@@ -97,33 +97,6 @@ TEST_F(SketchIPv6Test, QueryAfterInsertion) {
 }
 
 
-class SketchStringKeyTest : public ::testing::Test {
-protected:
-    static constexpr uint32_t BUCKET_NUM = 1024;
-    static constexpr uint32_t LEFT_PART_BITS = 104;
-    static constexpr uint32_t CELL_NUM_H = 8;
-    static constexpr uint32_t CELL_NUM_L = 8;
-    
-    jigsaw::Sketch<jigsaw::StringKey, BUCKET_NUM, LEFT_PART_BITS, CELL_NUM_H, CELL_NUM_L> sketch;
-};
-
-TEST_F(SketchStringKeyTest, BasicInsertion) {
-    jigsaw::StringKey key("test_key_string_1");
-    EXPECT_NO_THROW(sketch.insert(key));
-}
-
-TEST_F(SketchStringKeyTest, QueryAfterInsertion) {
-    jigsaw::StringKey key("test_key_string_2");
-    
-    for (int i = 0; i < 100; i++) {
-        sketch.insert(key);
-    }
-
-    uint32_t count = sketch.query(key);
-    EXPECT_GT(count, 0);
-}
-
-
 class SketchCompactStringTest : public ::testing::Test {
 protected:
     static constexpr uint32_t BUCKET_NUM = 1024;
